@@ -321,7 +321,7 @@ void Arx5ControllerBase::check_joint_state_sanity_()
         }
     }
     // Gripper should be around 0~robot_config_.gripper_width
-    double gripper_width_tolerance = 0.005; // m
+    double gripper_width_tolerance = 0.2; // m (avantbot patch: was 0.005)
     if (joint_state_.gripper_pos < -gripper_width_tolerance ||
         joint_state_.gripper_pos > robot_config_.gripper_width + gripper_width_tolerance)
     {
