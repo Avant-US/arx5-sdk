@@ -236,7 +236,7 @@
 
     <link name="eef_link">
     <inertial>
-        <mass value="0.0"/>
+        <mass value="0.150"/>
         <origin xyz="0.0 0.0 0.0"  rpy="0 0 0"/>
         <inertia ixx="0.0" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="0.0"/>
     </inertial>
