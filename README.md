@@ -113,35 +113,47 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 sudo slcand -o -f -s8 /dev/arxcan0 can0 && sudo ifconfig can0 up
 ```
 
-Alternatively, if you want not to run the second line everytime, you can also setup a system service:
+Alternatively, if you don't want to run the second line every time, you can set up a templated systemd service that brings up each adapter automatically when it's plugged in. This avoids the race condition between `network.target` and USB enumeration, supports hotplug, and scales cleanly to multiple adapters.
 
-```sh
-sudo vi /etc/systemd/system/arxcan-setup.service
+Extend each adapter's udev rule with `TAG+="systemd"` and an `ENV{SYSTEMD_WANTS}` pointing at the matching service instance. The instance number (e.g. `@0`) must match the `arxcan<N>` symlink index — the service template uses `%i` to derive both the device path and the CAN interface name:
+
+```
+SUBSYSTEM=="tty", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="117e", ATTRS{serial}=="<serial_0>", SYMLINK+="arxcan0", TAG+="systemd", ENV{SYSTEMD_WANTS}+="arxcan-setup@0.service"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="117e", ATTRS{serial}=="<serial_1>", SYMLINK+="arxcan1", TAG+="systemd", ENV{SYSTEMD_WANTS}+="arxcan-setup@1.service"
 ```
 
-Copy the following content to the service file
+Then create the templated service:
+
+```sh
+sudo vi /etc/systemd/system/arxcan-setup@.service
+```
+
+Copy the following content:
 
 ```service
 [Unit]
-After=network.target
+Description=SLCAN bring-up for can%i (from /dev/arxcan%i)
+BindsTo=dev-arxcan%i.device
+After=dev-arxcan%i.device
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'slcand -o -f -s8 /dev/arxcan0 can0 && ip link set can0 up'
 RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
+ExecStart=/bin/sh -c 'slcand -o -f -s8 /dev/arxcan%i can%i && ip link set can%i up'
+ExecStop=/bin/sh -c 'ip link set can%i down 2>/dev/null; pkill -f "slcand.*arxcan%i" 2>/dev/null; true'
 ```
 
-And activate the service
+`BindsTo=dev-arxcan%i.device` ties the service to the udev-created symlink, so systemd stops it on unplug and re-runs it on replug.
 
-```
+Reload everything and trigger udev for already-plugged adapters:
+
+```sh
 sudo systemctl daemon-reload
-sudo systemctl enable arxcan-setup.service
-sudo systemctl start arxcan-setup.service
-sudo systemctl status arxcan-setup.service
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=tty --action=add
 ```
+
+Each `canN` interface will come up automatically on plug-in and on boot. Verify with `ip -br link show type can`.
 
 ### For adapters using candleLight framework
 After plugging the adapter and running `ip a`, you should immediately find a can interface (usually `can0`). If you only have one arm, simply run 
